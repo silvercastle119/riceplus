@@ -10,14 +10,15 @@ const SHAPES = ['circle', 'squircle', 'hex', 'scallop', 'clover', 'flower'];
 const env = suffix => Object.entries(process.env).find(([k, v]) => k.endsWith(suffix) && v)?.[1];
 const R_URL = env('KV_REST_API_URL') || env('REDIS_REST_URL');
 const R_TOK = env('KV_REST_API_TOKEN') || env('REDIS_REST_TOKEN');
-if (process.env.VERCEL && !R_URL) console.error('Upstash Redis 환경변수가 없습니다:', Object.keys(process.env).filter(k => /KV|REDIS|UPSTASH/.test(k)));
 async function redis(...cmd) {
   const r = await fetch(R_URL, { method: 'POST', headers: { authorization: 'Bearer ' + R_TOK }, body: JSON.stringify(cmd) });
   const j = await r.json();
   if (j.error) throw Error(j.error);
   return j.result;
 }
-const noStore = () => { if (process.env.VERCEL) throw Error('저장소(Upstash Redis)가 연결되지 않았어요. Vercel Storage에서 연결 후 Redeploy 하세요'); };
+const noStore = () => {
+  if (process.env.VERCEL) throw Error('저장소(Redis)가 연결되지 않았어요. 찾은 설정 이름: ' + (Object.keys(process.env).filter(k => /KV|REDIS|UPSTASH/i.test(k)).join(', ') || '없음'));
+};
 const readFile = () => { try { return JSON.parse(fs.readFileSync(FILE)); } catch { return []; } };
 const writeFile = a => { noStore(); fs.writeFileSync(FILE, JSON.stringify(a)); };
 const db = R_URL ? {
