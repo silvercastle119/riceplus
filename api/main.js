@@ -6,16 +6,20 @@ const ADMIN = process.env.ADMIN_KEY || '';
 const COLORS = ['#F1FF1B', '#FF833E', '#EFC48B', '#CFE919', '#B2FBFF'];
 const SHAPES = ['circle', 'squircle', 'hex', 'scallop', 'clover', 'flower'];
 
-const R_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const R_TOK = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+// Vercel 연결 시 붙는 접두어(예: STORAGE_KV_REST_API_URL)가 달라도 찾도록 끝부분으로 검색
+const env = suffix => Object.entries(process.env).find(([k, v]) => k.endsWith(suffix) && v)?.[1];
+const R_URL = env('KV_REST_API_URL') || env('REDIS_REST_URL');
+const R_TOK = env('KV_REST_API_TOKEN') || env('REDIS_REST_TOKEN');
+if (process.env.VERCEL && !R_URL) console.error('Upstash Redis 환경변수가 없습니다:', Object.keys(process.env).filter(k => /KV|REDIS|UPSTASH/.test(k)));
 async function redis(...cmd) {
   const r = await fetch(R_URL, { method: 'POST', headers: { authorization: 'Bearer ' + R_TOK }, body: JSON.stringify(cmd) });
   const j = await r.json();
   if (j.error) throw Error(j.error);
   return j.result;
 }
+const noStore = () => { if (process.env.VERCEL) throw Error('저장소(Upstash Redis)가 연결되지 않았어요. Vercel Storage에서 연결 후 Redeploy 하세요'); };
 const readFile = () => { try { return JSON.parse(fs.readFileSync(FILE)); } catch { return []; } };
-const writeFile = a => fs.writeFileSync(FILE, JSON.stringify(a));
+const writeFile = a => { noStore(); fs.writeFileSync(FILE, JSON.stringify(a)); };
 const db = R_URL ? {
   // Redis 해시 "notes": 메모 id → JSON
   async all() { const h = (await redis('HGETALL', 'notes')) || [], out = []; for (let i = 1; i < h.length; i += 2) out.push(JSON.parse(h[i])); return out.sort((a, b) => a.t - b.t); },
