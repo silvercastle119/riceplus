@@ -1,0 +1,8 @@
+{
+  "name": "graduation-board",
+  "private": true,
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js"
+  }
+}
