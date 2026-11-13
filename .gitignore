@@ -1,0 +1,5 @@
+node_modules
+notes.json
+.DS_Store
+.vercel
+.env*

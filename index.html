@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>수료식 소감 보드</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  :root { --ink: #111; --line: #d9d9d9; --muted: #888; --soft: #f4f4f4; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Pretendard, system-ui, -apple-system, sans-serif; background: #fff; color: var(--ink); letter-spacing: -0.01em; overflow: hidden; }
+  button { font: inherit; color: inherit; }
+
+  /* 보드: 가운데 로고 + 둘레에 도형 메모 */
+  #board { position: relative; margin: 0 16px; height: 100vh; height: 100dvh; overflow: hidden; }
+  #logo { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: var(--logo-w, 220px); height: auto; pointer-events: none; }
+
+  /* 도형 메모 (보드·미리보기 공통) */
+  .note { position: absolute; container-type: inline-size; aspect-ratio: 1; }
+  .shape { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .body { position: absolute; inset: 17%; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #0003 transparent; }
+  .text { width: 100%; text-align: center; font-family: inherit; font-size: 16px; font-weight: 500; line-height: 1.45; margin: auto 0; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; color: var(--ink); }
+  #board .text { font-size: max(11px, calc(16px * var(--k, 1))); }
+  .tag { position: absolute; top: 2%; right: -2%; background: #fff; border: max(2px, 1.2cqw) solid var(--c); box-shadow: 0 0 0 1px #0002; border-radius: 3cqw; padding: 0.6cqw 5cqw; font-weight: 800; font-size: max(9px, 5.5cqw); white-space: nowrap; max-width: 75%; overflow: hidden; text-overflow: ellipsis; }
+  .sticker { position: absolute; transform: translate(-50%, -50%); font-size: 22cqw; line-height: 1; user-select: none; -webkit-user-select: none; touch-action: none; }
+  .sticker img, .pal img { width: 1.15em; height: 1.15em; object-fit: contain; display: block; pointer-events: none; }
+  #board .note { cursor: grab; user-select: none; -webkit-user-select: none; }
+  #board .note.sel { z-index: 3; touch-action: none; }
+  #board .note.moving { z-index: 4; cursor: grabbing; }
+  #board .note.sel .shape, #board .note.moving .shape { filter: drop-shadow(0 8px 16px #0003); }
+  .pop { position: absolute; z-index: 6; transform: translateX(-50%); display: flex; background: var(--ink); border-radius: 999px; padding: 3px; box-shadow: 0 6px 16px #0003; white-space: nowrap; }
+  .pop button { border: 0; background: none; color: #fff; padding: 8px 14px; font-size: 14px; cursor: pointer; }
+  .pop button + button { border-left: 1px solid #fff5; }
+  .empty { position: absolute; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 14px; white-space: nowrap; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 1px solid var(--ink); border-radius: 999px; background: #fff; font-size: 14px; cursor: pointer; }
+  .btn:hover, .btn.dark { background: var(--ink); color: #fff; }
+
+  #open { position: fixed; right: 20px; bottom: 20px; z-index: 5; padding: 14px 22px; font-size: 15px; font-weight: 600; box-shadow: 0 6px 16px rgba(0,0,0,.2); }
+
+  /* 작성 창 */
+  dialog { border: 1px solid var(--line); border-radius: 20px; padding: 20px; width: min(440px, calc(100vw - 24px)); max-height: calc(100vh - 24px); }
+  dialog::backdrop { background: rgba(255,255,255,.75); backdrop-filter: blur(4px); }
+  dialog h3 { margin: 0 0 12px; font-size: 18px; font-weight: 600; }
+  .pick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .sw { width: 30px; height: 30px; border-radius: 50%; border: 1px solid #0003; cursor: pointer; padding: 0; }
+  .shp { width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; padding: 5px; }
+  .shp svg { width: 100%; height: 100%; display: block; }
+  .sw[aria-pressed=true], .shp[aria-pressed=true] { outline: 2px solid var(--ink); outline-offset: 2px; }
+  #stage { display: flex; justify-content: center; padding: 8px 0 4px; }
+  #preview { position: relative; width: min(280px, 68vw); }
+  #preview .tag input { border: 0; outline: 0; width: 6em; font: inherit; text-align: center; padding: 0; background: transparent; }
+  #text { display: block; border: 0; outline: 0; resize: none; background: transparent; overflow-y: auto; padding: 0; max-height: 100%; scrollbar-width: thin; }
+  #text::placeholder { color: #0007; }
+  #preview .sticker { cursor: grab; }
+  #palette { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0; max-height: 130px; overflow-y: auto; }
+  .pal { font-size: 28px; line-height: 1; padding: 5px; border: 0; background: var(--soft); border-radius: 10px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .pal:hover { background: #e6e6e6; }
+  .hint { font-size: 12px; color: var(--muted); margin: 0; }
+  .ghost { position: fixed; z-index: 10; pointer-events: none; transform: translate(-50%, -50%) scale(1.15); }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .actions .btn { padding: 10px 20px; font-size: 15px; }
+</style>
+</head>
+<body>
+<main id="board">
+  <img id="logo" src="asset/logo.svg" alt="로고">
+</main>
+
+<button class="btn dark" id="open">✏️ 소감 남기기</button>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <h3>소감 남기기</h3>
+    <div class="pick" id="shapes" aria-label="모양"></div>
+    <div class="pick" id="colors" aria-label="색"></div>
+    <div id="stage">
+      <div class="note" id="preview">
+        <div class="body"><textarea class="text" id="text" rows="1" maxlength="150" placeholder="소감을 적어 주세요" aria-label="소감"></textarea></div>
+        <label class="tag"><input id="name" maxlength="20" placeholder="이름" aria-label="이름"></label>
+      </div>
+    </div>
+    <div id="palette"></div>
+    <p class="hint">캐릭터를 도형 위로 끌어다 놓으세요 · 탭하면 가운데에 붙어요 · 도형 밖으로 빼면 지워져요</p>
+    <div class="actions">
+      <button class="btn" value="cancel" formnovalidate>취소</button>
+      <button class="btn dark" id="submit" type="button">올리기</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const COLORS = ['#F1FF1B', '#FF833E', '#EFC48B', '#CFE919', '#B2FBFF'];
+const ADMIN = new URLSearchParams(location.search).get('admin');
+const $ = s => document.querySelector(s);
+const board = $('#board'), logo = $('#logo'), preview = $('#preview'), dlg = $('#dlg'), ta = $('#text');
+let notes = [], draft, lastSig = null;
+
+// ----- 도형 (viewBox 0~100) -----
+const ring = (n, R, off = 0) => Array.from({ length: n }, (_, i) => { const a = off + Math.PI * 2 * i / n; return [+(50 + R * Math.cos(a)).toFixed(2), +(50 + R * Math.sin(a)).toFixed(2)]; });
+const dots = (pts, r) => pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r}"/>`).join('');
+const SHAPES = {
+  circle:   '<circle cx="50" cy="50" r="50"/>',
+  squircle: '<rect width="100" height="100" rx="30"/>',
+  hex:      `<polygon points="${ring(6, 44).join(' ')}" stroke="currentColor" stroke-width="12" stroke-linejoin="round"/>`,
+  scallop:  '<circle cx="50" cy="50" r="40"/>' + dots(ring(16, 38), 12),
+  clover:   '<rect x="27" y="27" width="46" height="46"/>' + dots(ring(4, 23), 27),
+  flower:   '<circle cx="50" cy="50" r="30"/>' + dots(ring(5, 28, -Math.PI / 2), 22),
+};
+const shapeSvg = (shape, color) => `<svg class="shape" viewBox="0 0 100 100" fill="currentColor" style="color:${color}" aria-hidden="true">${SHAPES[shape] || SHAPES.circle}</svg>`;
+
+// 글자 수에 따라 글자 크기(cqw)와 도형 크기(px)
+const sizeFor = len => 220 + Math.min(len, 150) * 1.4;
+
+// ----- 메모 렌더링 -----
+function stickerEl(s) {
+  const el = document.createElement('div');
+  el.className = 'sticker';
+  if (s.startsWith('img:')) {
+    const img = new Image(); img.src = 'emoji/' + encodeURIComponent(s.slice(4)); img.alt = '';
+    el.append(img);
+  } else el.textContent = s;
+  return el;
+}
+const place = (el, s) => { el.style.left = s.x + '%'; el.style.top = s.y + '%'; return el; };
+
+function noteEl(n) {
+  const el = document.createElement('article'); el.className = 'note'; el.dataset.id = n.id;
+  el.style.setProperty('--c', n.color);
+  el.innerHTML = shapeSvg(n.shape, n.color) + '<div class="body"><p class="text"></p></div>';
+  const t = el.querySelector('.text'); t.textContent = n.text;
+  dragScroll(el.querySelector('.body'));
+  el.append(...n.stickers.map(s => place(stickerEl(s.s), s)));
+  const tag = document.createElement('div'); tag.className = 'tag'; tag.textContent = n.name || '익명'; el.append(tag);
+  return el;
+}
+
+// ----- 배치 -----
+// 끌어서 옮긴 메모(x,y 저장됨)는 그 자리에, 나머지는 로고 둘레에 나선형으로 겹치지 않게
+// 좌표는 로고 중심 기준, 화면 폭 배율(k) 적용 전 값으로 저장 → 폰에서도 같은 배치
+// ponytail: 매번 O(n²) 탐색. 수백 개 넘으면 격자 인덱스로
+let G = {};
+// 배율 k로 배치해 보고, 화면 높이 안에 다 들어가면 결과를 돌려줌
+function arrange(W, H, k) {
+  const gap = 10 * k, logoR = 165 * k, pad = 12;
+  const placed = [{ x: 0, y: 0, r: logoR }]; // 로고 자리: 메모 못 들어옴
+  const clampX = (x, r) => Math.max(-W / 2 + r, Math.min(W / 2 - r, x));
+  const has = n => Number.isFinite(n.x) && Number.isFinite(n.y);
+  for (const n of notes.filter(has)) { const r = sizeFor(n.text.length) * k / 2; placed.push({ x: clampX(n.x * k, r), y: n.y * k, r, n }); }
+  for (const n of notes.filter(n => !has(n))) {
+    const r = sizeFor(n.text.length) * k / 2;
+    for (let th = 0, rho = 0; ; ) {
+      const x = rho * Math.cos(th), y = rho * Math.sin(th);
+      if (rho > H || Math.abs(x) + r <= W / 2 && placed.every(p => Math.hypot(p.x - x, p.y - y) >= p.r + r + gap)) { placed.push({ x, y, r, n }); break; }
+      th += 14 / Math.max(rho, 14); rho = 22 * k * th;
+    }
+  }
+  const fits = placed.every(p => Math.abs(p.y) + p.r + pad <= H / 2 && Math.abs(p.x) + p.r <= W / 2 + 1);
+  return fits && { placed, logoR };
+}
+
+// 스크롤 없이 한 화면: 넘치면 전체 배율을 줄여 다시 배치. 폰은 기본 배율도 더 작게
+function layout() {
+  const W = board.clientWidth, H = board.clientHeight;
+  let k = Math.min(1, W / 560) * (W < 600 ? 0.8 : 1), res;
+  while (!(res = arrange(W, H, k)) && k > 0.2) k *= 0.9;
+  res ||= arrange(W, H * 100, k); // 그래도 안 되면 최소 배율로 (넘침 허용)
+  const { placed, logoR } = res, ox = W / 2, cy = H / 2;
+  G = { W, H, k, ox, cy, logoR };
+  board.style.setProperty('--k', k);
+  logo.style.setProperty('--logo-w', 220 * k + 'px');
+  board.querySelectorAll('.note, .empty, .pop').forEach(e => e.remove());
+  for (const p of placed.slice(1)) {
+    const el = noteEl(p.n), d = p.r * 2;
+    const rot = (parseInt(p.n.id.slice(0, 2), 16) % 13) - 6;
+    Object.assign(el.style, { width: d + 'px', left: ox + p.x - p.r + 'px', top: cy + p.y - p.r + 'px', transform: `rotate(${rot}deg)` });
+    el.classList.toggle('sel', p.n.id === selected);
+    movable(el, p.n, p.r);
+    board.append(el);
+  }
+  if (!notes.length) {
+    const e = document.createElement('p'); e.className = 'empty'; e.textContent = '아직 소감이 없어요. 첫 소감을 남겨 주세요!';
+    e.style.top = cy + 110 * k + 40 + 'px'; board.append(e);
+  }
+  renderPop();
+}
+addEventListener('resize', () => layout());
+
+// ----- 선택 · 이동 · 수정 · 삭제 -----
+let selected = null, dragging = false;
+let mine = {}; // 이 브라우저에서 쓴 메모의 수정 키
+try { mine = JSON.parse(localStorage.getItem('myNotes') || '{}'); } catch {}
+const saveMine = () => { try { localStorage.setItem('myNotes', JSON.stringify(mine)); } catch {} };
+const keyFor = id => ADMIN || mine[id];
+
+function select(id) {
+  selected = id;
+  board.querySelectorAll('.note').forEach(e => e.classList.toggle('sel', e.dataset.id === id));
+  renderPop();
+}
+document.addEventListener('pointerdown', e => { if (selected && !e.target.closest('#board .note, .pop')) select(null); });
+
+// 선택한 메모 아래에 "수정하기 | 삭제하기" (작성자·관리자만)
+function renderPop() {
+  board.querySelector('.pop')?.remove();
+  const el = selected && board.querySelector(`.note[data-id="${selected}"]`);
+  const n = el && notes.find(x => x.id === selected);
+  if (!n || !keyFor(n.id)) return;
+  const pop = document.createElement('div'); pop.className = 'pop';
+  pop.innerHTML = '<button type="button">수정하기</button><button type="button">삭제하기</button>';
+  const [edit, del] = pop.children;
+  edit.onclick = () => openDlg(n);
+  del.onclick = async () => {
+    if (!confirm('이 메모를 삭제할까요?')) return;
+    const r = await fetch(`/api/notes/${n.id}?key=${encodeURIComponent(keyFor(n.id))}`, { method: 'DELETE' });
+    if (!r.ok) return alert('삭제하지 못했어요');
+    selected = null; load();
+  };
+  pop.style.left = el.offsetLeft + el.offsetWidth / 2 + 'px';
+  pop.style.top = el.offsetTop + el.offsetHeight + 6 + 'px';
+  board.append(pop);
+}
+
+// 끌어서 위치 이동 (누구나). 터치는 한 번 탭해 선택한 뒤 끌기 — 그래야 페이지 스크롤과 안 겹침
+function movable(el, n, r) {
+  el.onclick = () => select(n.id);
+  el.onpointerdown = e => {
+    if (e.button || (e.pointerType !== 'mouse' && selected !== n.id)) return;
+    const x0 = e.clientX, y0 = e.clientY, l0 = el.offsetLeft, t0 = el.offsetTop;
+    let moved = false;
+    el.setPointerCapture(e.pointerId);
+    el.onpointermove = ev => {
+      const dx = ev.clientX - x0, dy = ev.clientY - y0;
+      if (!moved && Math.hypot(dx, dy) < 5) return;
+      if (!moved) { moved = dragging = true; el.classList.add('moving'); board.querySelector('.pop')?.remove(); }
+      el.style.left = l0 + dx + 'px'; el.style.top = t0 + dy + 'px';
+    };
+    el.onpointerup = el.onpointercancel = () => {
+      el.onpointermove = el.onpointerup = el.onpointercancel = null;
+      dragging = false; el.classList.remove('moving');
+      if (!moved) return;
+      let x = el.offsetLeft + r - G.ox, y = el.offsetTop + r - G.cy;
+      const min = G.logoR + r, d = Math.hypot(x, y); // 로고 위에는 못 놓음 → 바깥으로 밀어냄
+      if (d < min) { if (d) { x *= min / d; y *= min / d; } else x = min; }
+      x = Math.max(-G.W / 2 + r, Math.min(G.W / 2 - r, x));
+      y = Math.max(-G.H / 2 + r, Math.min(G.H / 2 - r, y)); // 화면 밖으로 못 나감
+      n.x = x / G.k; n.y = y / G.k; selected = n.id; layout();
+      fetch(`/api/notes/${n.id}/pos`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x: n.x, y: n.y }) }).catch(() => {});
+    };
+  };
+}
+
+// 마우스로 끌어서 긴 글 스크롤 (터치는 기본 스크롤). 글이 넘칠 때만, 메모 이동보다 우선
+function dragScroll(el) {
+  el.onpointerdown = e => {
+    if (e.pointerType !== 'mouse' || el.scrollHeight <= el.clientHeight) return;
+    e.stopPropagation();
+    const y0 = e.clientY, s0 = el.scrollTop;
+    el.setPointerCapture(e.pointerId); el.style.cursor = 'grabbing';
+    el.onpointermove = ev => { el.scrollTop = s0 - (ev.clientY - y0); };
+    el.onpointerup = el.onpointercancel = () => { el.onpointermove = null; el.style.cursor = ''; };
+  };
+}
+
+async function load() {
+  if (dragging) return;
+  try {
+    const data = await (await fetch('/api/notes')).json();
+    const sig = JSON.stringify(data);
+    if (sig === lastSig || dragging) return;
+    lastSig = sig; notes = data;
+    if (selected && !notes.some(n => n.id === selected)) selected = null;
+    layout();
+  } catch {}
+}
+load(); setInterval(load, 3000); // ponytail: 3초 폴링, 수백 명 동시 접속이면 SSE로
+
+// ----- 작성 창 -----
+const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+ta.oninput = grow;
+
+function drawPreview() {
+  preview.style.setProperty('--c', draft.color);
+  preview.querySelector('.shape')?.remove();
+  preview.insertAdjacentHTML('afterbegin', shapeSvg(draft.shape, draft.color));
+  preview.querySelectorAll('.sticker').forEach(e => e.remove());
+  draft.stickers.forEach((s, i) => {
+    const e = place(stickerEl(s.s), s);
+    e.onpointerdown = ev => { draft.stickers.splice(i, 1); drawPreview(); drag(ev, s.s, false); };
+    preview.insertBefore(e, preview.querySelector('.tag'));
+  });
+  document.querySelectorAll('.sw').forEach(b => b.ariaPressed = b.dataset.c === draft.color);
+  document.querySelectorAll('.shp').forEach(b => { b.ariaPressed = b.dataset.s === draft.shape; b.style.color = draft.color; });
+}
+
+// 포인터 드래그 (마우스·터치 공통). 고스트는 dialog 안에 붙여야 모달(top layer) 위로 보임
+function drag(ev, s, fromPalette) {
+  ev.preventDefault();
+  const ghost = stickerEl(s); ghost.classList.add('ghost');
+  ghost.style.fontSize = preview.offsetWidth * 0.22 + 'px';
+  dlg.append(ghost);
+  const x0 = ev.clientX, y0 = ev.clientY;
+  const move = e => { ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px'; };
+  move(ev);
+  const up = e => {
+    removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+    ghost.remove();
+    const r = preview.getBoundingClientRect();
+    const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    const tapped = fromPalette && Math.hypot(e.clientX - x0, e.clientY - y0) < 6; // 탭만 하면 가운데 근처에 붙임
+    if ((inside || tapped) && draft.stickers.length >= 30) return alert('캐릭터는 30개까지 붙일 수 있어요');
+    if (inside) draft.stickers.push({ s, x: (e.clientX - r.left) / r.width * 100, y: (e.clientY - r.top) / r.height * 100 });
+    else if (tapped) draft.stickers.push({ s, x: 30 + Math.random() * 40, y: 70 + Math.random() * 10 });
+    drawPreview();
+  };
+  addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+}
+
+for (const sh in SHAPES) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'shp'; b.dataset.s = sh; b.ariaLabel = '모양 ' + sh;
+  b.innerHTML = `<svg viewBox="0 0 100 100" fill="currentColor">${SHAPES[sh]}</svg>`;
+  b.onclick = () => { draft.shape = sh; drawPreview(); };
+  $('#shapes').append(b);
+}
+COLORS.forEach(c => {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'sw'; b.style.background = c; b.dataset.c = c; b.ariaLabel = '색 ' + c;
+  b.onclick = () => { draft.color = c; drawPreview(); };
+  $('#colors').append(b);
+});
+
+function addPal(s) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'pal';
+  if (s.startsWith('img:')) b.append(stickerEl(s).firstChild); else b.textContent = s;
+  b.onpointerdown = ev => drag(ev, s, true);
+  $('#palette').append(b);
+}
+fetch('/api/stickers').then(r => r.json()).then(files => files.forEach(f => addPal('img:' + f))).catch(() => {});
+
+const pick = a => a[Math.floor(Math.random() * a.length)];
+let editing = null; // 수정 중인 메모 id
+function openDlg(n) {
+  editing = n?.id || null;
+  draft = n ? { color: n.color, shape: n.shape || 'circle', stickers: n.stickers.map(s => ({ ...s })) }
+            : { color: pick(COLORS), shape: pick(Object.keys(SHAPES)), stickers: [] };
+  ta.value = n ? n.text : '';
+  if (n) $('#name').value = n.name;
+  dlg.querySelector('h3').textContent = n ? '소감 수정하기' : '소감 남기기';
+  $('#submit').textContent = n ? '수정하기' : '올리기';
+  drawPreview(); dlg.showModal(); grow();
+}
+$('#open').onclick = () => openDlg();
+
+$('#submit').onclick = async () => {
+  const text = ta.value.trim();
+  if (!text) return ta.focus();
+  $('#submit').disabled = true;
+  try {
+    const url = editing ? `/api/notes/${editing}?key=${encodeURIComponent(keyFor(editing))}` : '/api/notes';
+    const r = await fetch(url, { method: editing ? 'PUT' : 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...draft, text, name: $('#name').value }) });
+    const res = await r.json().catch(() => ({}));
+    if (!r.ok) throw Error(res.error || '권한이 없어요');
+    if (res.key) { mine[res.id] = res.key; saveMine(); }
+    dlg.close(); load();
+  } catch (e) { alert((editing ? '수정' : '올리기') + ' 실패: ' + e.message); }
+  $('#submit').disabled = false;
+};
+</script>
+</body>
+</html>
