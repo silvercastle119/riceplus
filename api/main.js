@@ -16,11 +16,13 @@ async function redis(...cmd) {
   if (j.error) throw Error(j.error);
   return j.result;
 }
-const noStore = () => {
-  if (process.env.VERCEL) throw Error('저장소(Redis)가 연결되지 않았어요. 찾은 설정 이름: ' + (Object.keys(process.env).filter(k => /KV|REDIS|UPSTASH/i.test(k)).join(', ') || '없음'));
-};
 const readFile = () => { try { return JSON.parse(fs.readFileSync(FILE)); } catch { return []; } };
-const writeFile = a => { noStore(); fs.writeFileSync(FILE, JSON.stringify(a)); };
+const writeFile = a => {
+  try { fs.writeFileSync(FILE, JSON.stringify(a)); }
+  catch (e) { // 배포 환경(파일 쓰기 불가)인데 Redis 설정을 못 찾은 경우
+    throw Error('저장소(Redis)가 연결되지 않았어요. 찾은 설정 이름: ' + (Object.keys(process.env).filter(k => /KV|REDIS|UPSTASH/i.test(k)).join(', ') || '없음'));
+  }
+};
 const db = R_URL ? {
   // Redis 해시 "notes": 메모 id → JSON
   async all() { const h = (await redis('HGETALL', 'notes')) || [], out = []; for (let i = 1; i < h.length; i += 2) out.push(JSON.parse(h[i])); return out.sort((a, b) => a.t - b.t); },
